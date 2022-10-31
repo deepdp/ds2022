@@ -1,0 +1,32 @@
+version: '2'
+
+services:
+  master-app:
+    image: master-app
+    environment:
+      APP_PORT: 8000
+    build: 
+      context: .
+      dockerfile: ./Dockerfile
+    restart: unless-stopped
+    network_mode: host
+
+  secondary-app1:
+    image: secondary-app1
+    environment:
+      APP_PORT: 8001
+    build: 
+      context: .
+      dockerfile: ./Dockerfile
+    restart: unless-stopped
+    network_mode: host
+
+  secondary-app2:
+    image: secondary-app2
+    environment:
+      APP_PORT: 8002
+    build: 
+      context: .
+      dockerfile: ./Dockerfile
+    restart: unless-stopped
+    network_mode: host    
