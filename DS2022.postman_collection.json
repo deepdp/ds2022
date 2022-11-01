@@ -1,0 +1,54 @@
+{
+	"info": {
+		"_postman_id": "16b9318d-16d4-4ccb-a718-026cc2599b0b",
+		"name": "DS2022",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "List messages",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:8000/list",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"list"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Append message",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": 2,\n    \"msg\": \"Second message\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:8000/append",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"append"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
