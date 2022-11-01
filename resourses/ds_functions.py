@@ -3,8 +3,10 @@ Set of custom functions
     Get MSGs List
     Set MSG
 """
-import time
 import logging
+import requests
+import time
+
 logger = logging.getLogger(__name__)
 
 class DSServices:
@@ -19,8 +21,8 @@ class DSServices:
     def post_msg(msg: str, storage: dict):
         try:
             # Set timeouts
-            #logger.info('Sleeping for a 4')
-            #time.sleep(4)
+            logger.info('Sleeping for a 4')
+            time.sleep(4)
             # Set message
             storage[msg.id] = msg.msg
             # Log message store event
@@ -30,3 +32,7 @@ class DSServices:
         except:
             logger.error('An error happened while put message operation')
             return 'REJECTED'
+
+    def postRequest(url, data):
+        response = requests.post(url, [], timeout=10)
+        return response.status_code
