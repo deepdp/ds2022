@@ -2,6 +2,7 @@ import concurrent.futures
 from fastapi import FastAPI
 from pydantic import BaseModel
 from requests import *
+from starlette.requests import Request
 import uvicorn
 import os
 import logging
@@ -17,8 +18,8 @@ logger = logging.getLogger(__name__)
 storage = {}
 # Secondary urls
 secondaries = {
-    'http://localhost:8001/append',
-    'http://localhost:8002/append',
+    'http://localhost:8001',
+    'http://localhost:8002',
 }
 secondariesStatus = {}
 
@@ -37,17 +38,21 @@ async def get_msgs_list():
 
 # Health status
 @app.get('/health')
-async def get_health_status(request: Request):
-    # 
-    # Check response status code by own url.
-    response_code = DSServices.get_healts_code(str(Request.url))
-    health_status = 'Unhealthy'
-    # Active
-    if response_code == 200:
-        health_status = 'Healthy'
-    # Busy    
-    elif response_code == 204:
-        health_status = 'Healthy'
+def get_health_status(request: Request):
+    print(secondariesStatus)
+    health_status = secondariesStatus[str(request.url)]
+    if (health_status is None):
+        # Check response status code by own url.
+        response_code = DSServices.get_healts_code(str(request.url))
+        health_status = 'Unhealthy'
+        # Active
+        if response_code == 200:
+            health_status = 'Healthy'
+        # Busy    
+        elif response_code == 204:
+            health_status = 'Healthy'
+        
+        DSServices.set_health_status(secondariesStatus, health_status, str(request.url))
 
     return health_status
 
@@ -62,7 +67,7 @@ async def set_msg(msg: MSG, write_concern: int = 1):
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 results = []
                 for url in secondaries:
-                    results.append(executor.submit(DSServices.postRequest, url=url, data=msg))
+                    results.append(executor.submit(DSServices.postRequest, url=url + '/append', data=msg))
                 for future in concurrent.futures.as_completed(results):
                     try:
                         logger.info(future.result())
@@ -89,8 +94,8 @@ async def set_msg(msg: MSG, write_concern: int = 1):
     return 'MSG appended' 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('APP_PORT')))
-    # Start heartbeater
-    DSServices.heartbeat_it(secondaries, secondariesStatus)
+    # uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('APP_PORT')))
     # Remove Test 
-    #uvicorn.run(app, host="0.0.0.0", port=int(5007))
+    uvicorn.run(app, host="0.0.0.0", port=int(5007))
+    # Start heartbeater
+    DSServices.heartbeat_it(urls=secondaries, secondariesStatus=secondariesStatus)

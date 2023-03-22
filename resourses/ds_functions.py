@@ -10,6 +10,9 @@ import time
 logger = logging.getLogger(__name__)
 
 class DSServices:
+    def __init__(self) -> None:
+        pass
+
     def get_single_msg(id: int, storage: dict):
         return {storage[id]}
 
@@ -49,25 +52,25 @@ class DSServices:
 
     def get_healts_code(url):
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=5)
             return response.status_code
         except:
-            logger.error('Could not get server health status')
+            logger.info('Could not get server health status for URL: ' + str(url))
             return 0
     
     def set_health_status(secondariesStatus: dict, current_status: str, secondary_url: str):
         secondariesStatus[secondary_url] = current_status
 
-    def heartbeat_it(self, urls: dict, secondariesStatus: dict):
+    def heartbeat_it(urls: dict, secondariesStatus: dict):
         for i in range(10):
-            try:
+            #try:
                 time.sleep(0.5)
                 for url in urls:
-                    DSServices.set_health_status(secondariesStatus, self.get_healts_code(url), url)
-
+                    print(secondariesStatus)
+                    DSServices.set_health_status(secondariesStatus, DSServices.get_healts_code(url), url)
                 
                 break
-            except Exception:
-                logger.error('Could not get server health status')
-                continue
+            #except Exception:
+            #    logger.info('Could not get server health status')
+            #    continue
 
