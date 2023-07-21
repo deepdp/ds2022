@@ -1,5 +1,7 @@
 import concurrent.futures
-from fastapi import FastAPI
+import json
+
+from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
 from requests import *
 from starlette.requests import Request
@@ -14,19 +16,27 @@ from resourses.ds_functions import DSServices
 logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
-# Dict storage for messages. For now it is a simple dict.
+# Dict storage for messages. For now, it is a simple dict.
 storage = {}
 # Secondary urls
 secondaries = {
     'http://localhost:8001',
     'http://localhost:8002',
 }
+# sleep in seconds on secondaries
+# url: seconds
+secondaries_sleep = {
+    'http://localhost:8001/append': 1,
+    'http://localhost:8002/append': 3,
+}
+# secondaries responses
+secondaries_responses = {}
 secondariesStatus = {}
 
 # Message class description
 class MSG(BaseModel):
-    id: int
     msg: str
+    write_concern: int
 
 # Init FastAPI
 app = FastAPI()
@@ -39,7 +49,9 @@ async def get_msgs_list():
 # Health status
 @app.get('/health')
 def get_health_status(request: Request):
-    print(secondariesStatus)
+    # health_status = secondariesStatus[str(request.url)]
+    logger.info(secondariesStatus)
+    return secondariesStatus
     health_status = secondariesStatus[str(request.url)]
     if (health_status is None):
         # Check response status code by own url.
@@ -57,45 +69,71 @@ def get_health_status(request: Request):
     return health_status
 
 @app.post('/append')
-async def set_msg(msg: MSG, write_concern: int = 1):
-    logger.info(os.getenv('APP_LEVEL'))
+async def set_msg(msg: MSG, background_tasks: BackgroundTasks, request: Request):
+    master_response = ''
+    logger.info('APP level: ' + os.getenv('APP_LEVEL'))
+
     # Master part
-    if os.getenv('APP_LEVEL') == 'master':        
+    if os.getenv('APP_LEVEL') == 'master':
+        # Save on master
+        master_response = DSServices.post_msg(msg, storage)
+
         # Replicate to secondaries
-        if (write_concern > 1):
-            allGood = True
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                results = []
-                for url in secondaries:
-                    results.append(executor.submit(DSServices.postRequest, url=url + '/append', data=msg))
-                for future in concurrent.futures.as_completed(results):
-                    try:
-                        logger.info(future.result())
-                    except RequestException as e:
-                        allGood = False
-                        logger.info(e)
+        allGood = True
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
 
-            # All messages should be appended.
-            # Count of appended messages must follw wtite concern rules.
-            if not allGood and ((len(results) - 1) != write_concern):
-                return 'Something went wrong! Please check logs.'        
+            json_object = msg.model_dump_json()
+            future_to_url = {executor.submit(DSServices.postRequest, url=url + '/append', json=json_object): url for url
+                             in secondaries}
 
-    # Save on master
-    masterResponse = DSServices.post_msg(msg, storage)
+            #for future in concurrent.futures.wait(future_to_url, return_when='ALL_COMPLETED'):
+            for future in concurrent.futures.as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    data = future.result()
+                    if data == 200:
+                        secondaries_responses[url] = 'ACK'
+                    else:
+                        secondaries_responses[url] = 'REJECTED'
+
+                    # Check by write concern
+                    if master_response == 'ACK':
+                        # at lest one response is ACK
+                       if msg.write_concern == 2 and secondaries_responses[url] == 'ACK':
+                           return 'MSG appended for WC = 2'
+                       elif msg.write_concern == 3 and len(secondaries_responses) == len(secondaries) and 'REJECTED' not in secondaries_responses:
+                           return 'MSG appended for WC = 3'
+
+                except Exception as exc:
+                    logger.error('%r generated an exception: %s' % (url, exc))
        
     # Secondaries part
-    secondaryResponses = []
+    #secondaryResponses = []
     if os.getenv('APP_LEVEL') == 'secondary':
-        secondaryResponses.append(DSServices.post_msg(msg, storage))
-    
-    if 'REJECTED' in secondaryResponses:
-        return 'Something went wrong! Please check logs.'
+        # we should not wait for replication, so it will be in background process
+        if msg.write_concern == 1:
+            background_tasks.add_task(DSServices.post_msg, msg, storage, sleep=secondaries_sleep[str(request.url)])
+        # Replicate
+        elif msg.write_concern > 1:
+            DSServices.post_msg(msg, storage, sleep=secondaries_sleep[str(request.url)])
 
-    return 'MSG appended' 
+    #if 'REJECTED' in secondaryResponses:
+    #    return 'Something went wrong! Please check logs.'
+
+    # write_concern = 1, return to client
+    if msg.write_concern == 1:
+        if master_response == 'ACK':
+            return 'MSG appended'
+        else:
+            return 'Something went wrong! Please check logs.'
+
+    # General return
+    return 'Something went wrong! Please check logs.'
 
 if __name__ == "__main__":
-    # uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('APP_PORT')))
-    # Remove Test 
-    uvicorn.run(app, host="0.0.0.0", port=int(5007))
+    # Docker ports.
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('APP_PORT')))
+    # Test port
+    #uvicorn.run(app, host="0.0.0.0", port=int(5007))
     # Start heartbeater
-    DSServices.heartbeat_it(urls=secondaries, secondariesStatus=secondariesStatus)
+    # DSServices.heartbeat_it(urls=secondaries, secondariesStatus=secondariesStatus)
