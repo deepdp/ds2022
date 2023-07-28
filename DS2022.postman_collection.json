@@ -30,7 +30,7 @@
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"id\": 2,\n    \"msg\": \"Second message\"\n}",
+					"raw": "{\n    \"msg\": \"Message\",\n    \"write_concern\": 2\n}",
 					"options": {
 						"raw": {
 							"language": "json"
